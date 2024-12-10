@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Análisis de Datos</h2>
+<form method="post" class="row g-3 mb-4">
+    <div class="col-md-4">
+        <label for="device" class="form-label">Dispositivo:</label>
+        <select name="device" id="device" class="form-select" required>
+            {% for disp in dispositivos %}
+                <option value="{{ disp[1] }}" {% if device_selected == disp[1] %}selected{% endif %}>{{ disp[1] }} ({{ disp[2] }})</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label for="start_date" class="form-label">Fecha Inicio:</label>
+        <input type="date" name="start_date" class="form-control" value="{{ start_date if start_date else '' }}" required>
+    </div>
+    <div class="col-md-3">
+        <label for="end_date" class="form-label">Fecha Fin:</label>
+        <input type="date" name="end_date" class="form-control" value="{{ end_date if end_date else '' }}" required>
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary w-100">Aplicar Filtros</button>
+    </div>
+</form>
+
+{% if data %}
+    <hr>
+    <h4>Resultados:</h4>
+    <canvas id="analysisChart" height="100"></canvas>
+    <div class="mt-3">
+        <p>Promedio: <strong>{{ avg }}</strong></p>
+        <p>Desviación Estándar: <strong>{{ std_dev }}</strong></p>
+        <p>Valor Máximo: <strong>{{ max_val }}</strong></p>
+        <p>Valor Mínimo: <strong>{{ min_val }}</strong></p>
+        <p>Hora Pico: <strong>{{ peak_hour }}:00 con un promedio de {{ peak_value }}</strong></p>
+    </div>
+
+    <h5 class="mt-4">Promedio por Hora</h5>
+    <canvas id="hourlyAvgChart" height="100"></canvas>
+    
+    <h5 class="mt-4">Detalle de Promedio por Hora</h5>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Hora</th>
+                <th>Promedio</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for hour, value in hourly_avg %}
+                <tr>
+                    <td>{{ "%02d" % hour }}:00</td>
+                    <td>{{ "%.2f" | format(value) }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <script>
+    // Gráfico de Línea para Valores
+    const rawData = {{ data|tojson }};
+    const labels = rawData.map(d => d[0]);
+    const values = rawData.map(d => parseFloat(d[1]) || 0);
+    
+    const ctx = document.getElementById('analysisChart').getContext('2d');
+    const analysisChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Valor',
+                data: values,
+                borderColor: 'red',
+                backgroundColor: 'rgba(255, 0, 0, 0.1)',
+                fill: true,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { 
+                    type: 'time',
+                    time: { 
+                        unit: 'day',
+                        tooltipFormat: 'YYYY-MM-DD HH:mm:ss',
+                        displayFormats: {
+                            day: 'YYYY-MM-DD'
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Fecha y Hora'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Valor'
+                    },
+                    beginAtZero: true
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    enabled: true
+                }
+            }
+        }
+    });
+
+    // Gráfico de Barras para Promedio por Hora
+    const hourlyAvgData = {{ hourly_avg|tojson }};
+    const hourLabels = hourlyAvgData.map(d => `${d[0]}:00`);
+    const hourValues = hourlyAvgData.map(d => parseFloat(d[1]) || 0);
+
+    const ctx2 = document.getElementById('hourlyAvgChart').getContext('2d');
+    const hourlyAvgChart = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+            labels: hourLabels,
+            datasets: [{
+                label: 'Promedio por Hora',
+                data: hourValues,
+                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { 
+                    title: {
+                        display: true,
+                        text: 'Hora del Día'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Promedio'
+                    },
+                    beginAtZero: true
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    enabled: true
+                }
+            }
+        }
+    });
+    </script>
+{% elif request.method == 'POST' %}
+    <div class="alert alert-warning">No se encontraron datos para los filtros seleccionados.</div>
+{% endif %}
+{% endblock %}

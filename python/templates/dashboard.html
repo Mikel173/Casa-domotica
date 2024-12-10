@@ -1,0 +1,190 @@
+{% extends "base.html" %} {% block content %}
+<h2>Dashboard en Tiempo Real</h2>
+
+<div class="container-fluid">
+  <div class="row">
+    <!-- Panel Lateral Izquierdo para Selección de Dispositivo -->
+    <div class="col-md-3 col-sm-4 mb-4">
+      <div class="card">
+        <div class="card-header">
+          <h5>Selecciona un Dispositivo</h5>
+        </div>
+        <div class="card-body">
+          <form>
+            <div class="mb-3">
+              <label for="device_id" class="form-label">Dispositivo:</label>
+              <select id="device_id" class="form-select">
+                {% for disp in dispositivos %}
+                <option value="{{ disp[0] }}">
+                  {{ disp[1] }} ({{ disp[2] }})
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel Principal Derecho para el Gráfico -->
+    <div class="col-md-9 col-sm-8 mb-4">
+      <div class="card">
+        <div class="card-header">
+          <h5>Gráfico en Tiempo Real</h5>
+        </div>
+        <div class="card-body">
+          <canvas id="realtimeChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Incluye Moment.js y el adaptador de Chart.js para Moment -->
+<script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0"></script>
+
+<script>
+  let chart = null; // Variable para almacenar la instancia del gráfico
+  const maxDataPoints = 50; // Número máximo de puntos a mostrar
+
+  // Obtener el dispositivo seleccionado inicialmente
+  let device_id = document.getElementById("device_id").value;
+
+  // Escuchar cambios en el selector de dispositivos
+  document.getElementById("device_id").addEventListener("change", function () {
+    device_id = this.value;
+    resetChart();
+    updateChart();
+  });
+
+  // Función para inicializar el gráfico
+  function initializeChart(labels, data) {
+    const ctx = document.getElementById("realtimeChart").getContext("2d");
+    chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: "Valor",
+            data: data,
+            borderColor: "blue",
+            backgroundColor: "rgba(0, 0, 255, 0.1)",
+            fill: true,
+            tension: 0.1,
+            pointRadius: 2, // Reducir el tamaño de los puntos
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false, // Permitir que el canvas se ajuste al contenedor
+        scales: {
+          x: {
+            type: "time",
+            time: {
+              unit: "minute", // Ajustar según la frecuencia de los datos
+              tooltipFormat: "YYYY-MM-DD HH:mm:ss",
+              displayFormats: {
+                minute: "HH:mm:ss",
+              },
+            },
+            title: {
+              display: true,
+              text: "Tiempo",
+            },
+            ticks: {
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 10, // Limitar el número de etiquetas en el eje X
+            },
+          },
+          y: {
+            title: {
+              display: true,
+              text: "Valor",
+            },
+            beginAtZero: true,
+          },
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: "top",
+          },
+          tooltip: {
+            enabled: true,
+            mode: "nearest",
+            intersect: false,
+          },
+        },
+        animation: {
+          duration: 0, // Desactivar animaciones para actualizaciones más rápidas
+        },
+      },
+    });
+  }
+
+  // Función para actualizar el gráfico con nuevos datos
+  function updateChart() {
+    $.getJSON(`/api/realtime_data/${device_id}`, function (response) {
+      const newLabels = response.map((r) => r.fecha_hora);
+      const newValues = response.map((r) => r.valor);
+
+      if (chart === null) {
+        // Si el gráfico aún no está inicializado, inicializarlo
+        initializeChart(newLabels, newValues);
+      } else {
+        // Agregar nuevos datos al gráfico
+        newLabels.forEach((label, index) => {
+          chart.data.labels.push(label);
+          chart.data.datasets[0].data.push(newValues[index]);
+
+          // Mantener solo el número máximo de puntos
+          if (chart.data.labels.length > maxDataPoints) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+          }
+        });
+
+        // Actualizar el gráfico
+        chart.update();
+      }
+    }).fail(function (jqXHR, textStatus, errorThrown) {
+      console.error(
+        "Error al obtener datos en tiempo real:",
+        textStatus,
+        errorThrown
+      );
+    });
+  }
+
+  // Función para resetear el gráfico cuando se cambia de dispositivo
+  function resetChart() {
+    if (chart !== null) {
+      chart.destroy();
+      chart = null;
+    }
+  }
+
+  // Inicializar el gráfico al cargar la página
+  updateChart();
+
+  // Actualizar el gráfico cada segundo
+  setInterval(updateChart, 1000);
+</script>
+
+<style>
+  /* Ajustar el tamaño del canvas para que ocupe el espacio disponible */
+  #realtimeChart {
+    width: 100% !important;
+    height: 400px !important;
+  }
+
+  /* Asegurar que las tarjetas tengan el mismo alto */
+  .card {
+    height: 100%;
+  }
+</style>
+{% endblock %}
